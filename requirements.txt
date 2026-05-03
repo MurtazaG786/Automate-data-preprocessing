@@ -1,0 +1,35 @@
+# Core LLM + Graph
+langgraph
+langchain
+langchain-community
+langchain-core
+
+#LLM
+langchian-google-genai
+
+# Data processing
+pandas
+numpy
+
+# ML + preprocessing
+scikit-learn
+imbalanced-learn  # for SMOTE
+
+# Feature engineering / stats
+scipy
+
+
+# Visualization / EDA (optional but recommended)
+matplotlib
+seaborn
+
+# Profiling (optional advanced)
+ydata-profiling
+
+# API / UI (optional depending on your setup)
+fastapi
+uvicorn
+streamlit
+
+# Utilities
+pydantic
