@@ -1,4 +1,7 @@
 import pandas as pd
+from ydata_profiling import ProfileReport
+import sweetviz as sv
+
 
 
 def load_dataset_node(state):
@@ -20,6 +23,10 @@ def load_dataset_node(state):
 
         # LOAD DATASET
         df = pd.read_csv(file)
+
+        #profiling
+        profile = ProfileReport(df, title="Dataset Report")
+        profile.to_file("ydata_report.html")
 
         # EMPTY CHECK
         if df.empty:
