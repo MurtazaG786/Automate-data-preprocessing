@@ -5,7 +5,7 @@ langchain-community
 langchain-core
 
 #LLM
-langchian-google-genai
+langchain-google-genai
 
 # Data processing
 pandas
