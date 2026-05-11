@@ -1,6 +1,7 @@
 import pandas as pd
 from ydata_profiling import ProfileReport
 import sweetviz as sv
+import tempfile
 
 
 
@@ -21,22 +22,23 @@ def load_dataset_node(state):
                 "error": "Only CSV files are supported."
             }
 
-        # LOAD DATASET
         df = pd.read_csv(file)
 
-        #profiling
         profile = ProfileReport(df, title="Dataset Report")
         profile.to_file("ydata_report.html")
 
-        # EMPTY CHECK
         if df.empty:
             return {
                 "error": "Uploaded CSV file is empty."
             }
 
-        # RETURN STATE UPDATE
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
+        temp_path = temp_file.name
+        temp_file.close()
+        df.to_csv(temp_path, index=False)
+
         return {
-            "df": df,
+            "df_path": temp_path,
 
             "rows": df.shape[0],
             "cols": df.shape[1],
