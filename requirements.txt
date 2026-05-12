@@ -33,3 +33,6 @@ streamlit
 
 # Utilities
 pydantic
+
+setuptools<81
+sweetviz
