@@ -1,55 +1,52 @@
 import pandas as pd
 from ydata_profiling import ProfileReport
-import sweetviz as sv
-import tempfile
-
 
 
 def load_dataset_node(state):
 
     try:
-        file = state["uploaded_file"]
+        input_path = state["input_file_path"]
+        report_path = state["report_path"]
 
-        # FILE CHECK
-        if file is None:
+        # file exists check
+        if not input_path:
             return {
-                "error": "No file uploaded."
+                "error": "No input file path provided."
             }
 
-        # CSV CHECK
-        if not file.name.endswith(".csv"):
+        # csv check
+        if not input_path.endswith(".csv"):
             return {
                 "error": "Only CSV files are supported."
             }
 
-        df = pd.read_csv(file)
+        # read csv
+        df = pd.read_csv(input_path)
 
-        profile = ProfileReport(df, title="Dataset Report")
-        profile.to_file("ydata_report.html")
-
+        # empty file check
         if df.empty:
             return {
                 "error": "Uploaded CSV file is empty."
             }
 
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
-        temp_path = temp_file.name
-        temp_file.close()
-        df.to_csv(temp_path, index=False)
+        # generate report
+        profile = ProfileReport(
+            df,
+            title="Dataset Report"
+        )
+        profile.to_file(report_path)
 
         return {
-            "df_path": temp_path,
-
-            "rows": df.shape[0],
-            "cols": df.shape[1],
-
-            "message": "Dataset loaded successfully.",
-
-            "error": None
-        }
-
+        "rows": df.shape[0],
+        "cols": df.shape[1],
+        "steps": state.get("steps", []) + [
+            f"Dataset loaded successfully. Rows: {df.shape[0]}, Columns: {df.shape[1]}"
+        ],
+        "message": "Dataset loaded successfully.",
+        "error": None
+    }
+            
     except Exception as e:
-
         return {
             "error": str(e)
         }

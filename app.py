@@ -1,6 +1,9 @@
 import os
+import tempfile
+import uuid
 import streamlit as st
 import streamlit.components.v1 as components
+from langgraph.types import Command
 from workflow import graph
 
 st.set_page_config(
@@ -10,31 +13,150 @@ st.set_page_config(
 
 st.title("Automated Data Preprocessing Agent")
 
+if "thread_id" not in st.session_state:
+    st.session_state["thread_id"] = str(uuid.uuid4())
+
+config = {
+    "configurable": {
+        "thread_id": st.session_state["thread_id"]
+    }
+}
+
 uploaded_file = st.file_uploader(
     "Upload CSV File",
     type=["csv"]
 )
 
 if uploaded_file is not None:
-    result = graph.invoke({
-        "uploaded_file": uploaded_file
-    })
-    
-    
-    
-    st.session_state["result"] = result
-    if "result" in st.session_state:
 
-        result = st.session_state["result"]
-        st.write(result["message"])
+    if "temp_dir" not in st.session_state:
+        st.session_state["temp_dir"] = tempfile.mkdtemp()
 
-    
-    if result.get("error"):
-        st.error(result["error"])
+    temp_dir = st.session_state["temp_dir"]
+
+    input_path = os.path.join(temp_dir, "input.csv")
+    output_path = os.path.join(temp_dir, "processed.csv")
+    report_path = os.path.join(temp_dir, "ydata_report.html")
+
+    with open(input_path, "wb") as f:
+        f.write(uploaded_file.getbuffer())
+
+    if "result" not in st.session_state:
+        result = graph.invoke(
+            {
+                "input_file_path": input_path,
+                "output_file_path": output_path,
+                "report_path": report_path,
+                "steps": []
+            },
+            config=config
+        )
+
+        st.session_state["result"] = result
+        st.session_state["output_path"] = output_path
+        st.session_state["report_path"] = report_path
+
+
+if "result" in st.session_state:
+
+    result = st.session_state["result"]
+
+    steps = result.get("steps", [])
+
+    if steps:
+        st.subheader("Pipeline Progress")
+        for step in steps:
+            st.success(step)
+
+    report_path = st.session_state.get("report_path")
+
+    if report_path and os.path.exists(report_path):
+        st.subheader("Dataset Report")
+        with open(report_path, "r", encoding="utf-8") as html_file:
+            components.html(
+                html_file.read(),
+                height=800,
+                scrolling=True
+            )
+
+    if "__interrupt__" in result:
+
+        interrupt_data = result["__interrupt__"][0].value
+
+        st.info("Target column confirmation required")
+
+        detected_target = interrupt_data.get("detected_target")
+        confidence = interrupt_data.get("confidence")
+        reason = interrupt_data.get("reason")
+        columns = interrupt_data.get("columns", [])
+
+        st.write(f"Detected Target: **{detected_target}**")
+        st.write(f"Confidence: **{confidence}**")
+        st.write(f"Reason: {reason}")
+
+        selected_target = st.selectbox(
+            "Select correct target column",
+            options=["No target column"] + columns,
+            index=(columns.index(detected_target) + 1)
+            if detected_target in columns else 0
+        )
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("Confirm Detected Target"):
+                result = graph.invoke(
+                    Command(resume={"approved": True}),
+                    config=config
+                )
+
+                st.session_state["result"] = result
+                st.rerun()
+
+        with col2:
+            if st.button("Use Selected / Unsupervised"):
+
+                if selected_target == "No target column":
+                    resume_data = {
+                        "approved": False,
+                        "target_column": None
+                    }
+                else:
+                    resume_data = {
+                        "approved": False,
+                        "target_column": selected_target
+                    }
+
+                result = graph.invoke(
+                    Command(resume=resume_data),
+                    config=config
+                )
+
+                st.session_state["result"] = result
+                st.rerun()
 
     else:
-        if os.path.exists("ydata_report.html"):
-            with open("ydata_report.html", "r", encoding="utf-8") as html_file:
-                components.html(html_file.read(), height=800, scrolling=True)
+
+        if result.get("message"):
+            st.success(result["message"])
+
+        if result.get("problem_type"):
+            st.write(f"Problem Type: **{result['problem_type']}**")
+
+        if result.get("target_column"):
+            st.write(f"Target Column: **{result['target_column']}**")
+
+        if result.get("error"):
+            st.error(result["error"])
+
         else:
-            st.error("Report file not found: ydata_report.html")
+            output_path = st.session_state["output_path"]
+
+            if os.path.exists(output_path):
+                with open(output_path, "rb") as f:
+                    st.download_button(
+                        label="Download Processed CSV",
+                        data=f.read(),
+                        file_name="processed.csv",
+                        mime="text/csv"
+                    )

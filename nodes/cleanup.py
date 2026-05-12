@@ -1,57 +1,84 @@
-import json
 import os
-import re
-
+import json
 import pandas as pd
-import google.genai as genai
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field
+from google import genai
+from google.genai import types
+
 load_dotenv()
 
-def column_cleanup(state):
-    df_path = state.get("df_path")
-    if not df_path or not os.path.exists(df_path):
-        return {"error": "No dataframe file path in state."}
 
-    df = pd.read_csv(df_path, encoding="latin1")
+class ColumnsToDrop(BaseModel):
+    columns: list[str] = Field(
+        description="List of unwanted column names to drop from dataframe"
+    )
 
-    duplicate_count = df.duplicated().sum()
-    if duplicate_count != 0:
-        df.drop_duplicates(inplace=True)
-    
-    prompt=f""" hey you're a senior machine learning engineer who have worked on so many datasets ,
-    analyze this dataframe and return me the list of unwanted column names same as given in the dataframe ,
-    just return the list of unwanted column names in json format nothing else
-    here is your dataset :
-    {df.head(50)}
-      """
+
+def cleanup(state):
+    input_path = state.get("input_file_path")
+    output_path = state.get("output_file_path")
+
+    if not input_path or not os.path.exists(input_path):
+        return {"error": "No input file path found in state."}
+
+    if not output_path:
+        return {"error": "No output file path found in state."}
+
+    df = pd.read_csv(input_path, encoding="latin1")
+
+    original_len = len(df)
+    df.drop_duplicates(inplace=True)
+    duplicates_removed = original_len - len(df)
+
+    valid_columns_to_drop = []
+
     api_key = os.getenv("GOOGLE_API_KEY")
     model_name = os.getenv("MODEL_NAME")
-    if not api_key or not model_name:
-        return {"error": "Missing GOOGLE_API_KEY or MODEL_NAME in environment."}
 
-    client = genai.Client(api_key=api_key)
-    try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt
-        )
-    except Exception as exc:
-        return {"error": f"LLM request failed: {exc}"}
+    if api_key and model_name:
+        prompt = f"""
+    You are a senior machine learning engineer. Analyze the dataset and identify unwanted columns. Unwanted columns may include: - ID columns - serial number columns - constant columns - columns with mostly missing values - irrelevant text columns Return only valid column names from the given dataframe.
 
-    column_info = (response.text or "").strip()
-    column_info = re.sub(r"```json|```", "", column_info).strip()
-    try:
-        columns_to_drop = json.loads(column_info)
-    except json.JSONDecodeError:
-        return {"error": "Model output is not valid JSON list of column names."}
+    Column names and dtypes:
+    {df.dtypes.to_string()}
 
-    df.drop(columns=columns_to_drop, inplace=True)
+    Dataset sample:
+    {df.head(10).to_string()}
+    """
 
-    df.to_csv(df_path, index=False)
-    message = json.dumps(columns_to_drop)
+        client = genai.Client(api_key=api_key)
+
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=ColumnsToDrop,
+                ),
+            )
+
+            result = ColumnsToDrop.model_validate_json(response.text)
+
+            valid_columns_to_drop = [
+                col for col in result.columns
+                if col in df.columns
+            ]
+
+            if valid_columns_to_drop:
+                df.drop(columns=valid_columns_to_drop, inplace=True)
+
+        except Exception:
+            valid_columns_to_drop = []
+
+    df.to_csv(output_path, index=False)
 
     return {
-        "df_path": df_path,
-        "message": f"columns dropped succesfully {message}",
+        "output_file_path": output_path,
+        "steps": state.get("steps", []) + [
+            f"Cleanup completed. Duplicates removed: {duplicates_removed}. Columns dropped: {valid_columns_to_drop}"
+        ],
+        "message": f"Cleanup completed. Columns dropped: {json.dumps(valid_columns_to_drop)}",
         "error": None
     }
