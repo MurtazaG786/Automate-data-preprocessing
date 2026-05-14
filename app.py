@@ -150,13 +150,67 @@ if "result" in st.session_state:
             st.error(result["error"])
 
         else:
-            output_path = st.session_state["output_path"]
+            # ── Split Info ──────────────────────────────────────────
+            train_rows = result.get("train_rows")
+            test_rows = result.get("test_rows")
 
+            if train_rows and test_rows:
+                st.subheader("Train / Test Split")
+                col_a, col_b = st.columns(2)
+                col_a.metric("Training Rows", train_rows)
+                col_b.metric("Testing Rows", test_rows)
+
+            # ── Column Classification ───────────────────────────────
+            num_cols = result.get("numerical_columns", [])
+            cat_cols = result.get("categorical_columns", [])
+
+            if num_cols or cat_cols:
+                st.subheader("Column Classification")
+
+                col_c, col_d = st.columns(2)
+
+                with col_c:
+                    st.markdown("**Numerical Columns**")
+                    for c in num_cols:
+                        st.write(f"- {c}")
+
+                with col_d:
+                    st.markdown("**Categorical Columns**")
+                    for c in cat_cols:
+                        st.write(f"- {c}")
+
+            # ── Downloads ───────────────────────────────────────────
+            st.subheader("Download Datasets")
+
+            train_path = result.get("train_path")
+            test_path = result.get("test_path")
+
+            dl_col1, dl_col2, dl_col3 = st.columns(3)
+
+            output_path = st.session_state["output_path"]
             if os.path.exists(output_path):
                 with open(output_path, "rb") as f:
-                    st.download_button(
+                    dl_col1.download_button(
                         label="Download Processed CSV",
                         data=f.read(),
                         file_name="processed.csv",
-                        mime="text/csv"
+                        mime="text/csv",
+                    )
+
+            if train_path and os.path.exists(train_path):
+                with open(train_path, "rb") as f:
+                    dl_col2.download_button(
+                        label="Download Train CSV",
+                        data=f.read(),
+                        file_name="train.csv",
+                        mime="text/csv",
+                    )
+
+            if test_path and os.path.exists(test_path):
+                with open(test_path, "rb") as f:
+                    dl_col3.download_button(
+                        label="Download Test CSV",
+                        data=f.read(),
+                        file_name="test.csv",
+                        mime="text/csv",
                     )
