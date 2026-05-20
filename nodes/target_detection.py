@@ -105,15 +105,16 @@ Dataset sample:
     # {"approved": False, "target_column": None}
 
     if user_decision.get("approved") is True:
-            return {
-                "target_column": result.target_column,
-                "problem_type": "supervised",
-                "steps": state.get("steps", []) + [
-                    f"Target column confirmed: {result.target_column}"
-                ],
-                "message": f"Target column confirmed: {result.target_column}",
-                "error": None
-            }
+        return {
+            "target_column": result.target_column,
+            "problem_type": "supervised",
+            "steps": state.get("steps", []) + [
+                f"Target column confirmed: {result.target_column}"
+            ],
+            "message": f"Target column confirmed: {result.target_column}",
+            "error": None,
+            "output_file_path": output_path  # ✓ already here
+        }
 
     selected_target = user_decision.get("target_column")
 
@@ -125,7 +126,8 @@ Dataset sample:
                 f"Target column selected manually: {selected_target}"
             ],
             "message": f"Target column selected manually: {selected_target}",
-            "error": None
+            "error": None,
+            "output_file_path": output_path  # ← ADD THIS
         }
 
     # If user selected "No target column"
@@ -136,5 +138,6 @@ Dataset sample:
             "No target column selected. Treating this as an unsupervised learning problem."
         ],
         "message": "No target column selected. Treating this as an unsupervised learning problem.",
-        "error": None
+        "error": None,
+        "output_file_path": output_path  # ← ADD THIS
     }

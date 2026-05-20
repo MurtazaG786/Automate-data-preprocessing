@@ -31,8 +31,12 @@ def split_and_classify_node(state):
     target_column = state.get("target_column")
     problem_type = state.get("problem_type", "unsupervised")
 
+    output_path = state.get("output_file_path")
+
+    
     if not output_path or not os.path.exists(output_path):
-        return {"error": "Processed dataset file not found for splitting."}
+        return {"error": "Processed dataset file not found for splitting."}  # ← silent fail here!
+    ...
 
     df = pd.read_csv(output_path)
 
@@ -128,12 +132,29 @@ Sample data (from training set only):
 
         classification = ColumnClassification.model_validate_json(response.text)
 
-        # Safety: keep only columns that actually exist in the dataframe
-        num_cols = [c for c in classification.numerical_columns if c in feature_columns]
-        cat_cols = [c for c in classification.categorical_columns if c in feature_columns]
+        target = state.get(
+            "target_column"
+        )
+
+        num_cols = [ c for c in classification.numerical_columns
+            if (
+                c in feature_columns
+                and c != target
+            )
+        ]
+
+
+        cat_cols = [
+            c   for c in classification.categorical_columns
+            if (
+                c in feature_columns
+                and c != target
+            )
+        ]
 
     except Exception as exc:
         return {"error": f"Column classification failed: {exc}"}
+ 
 
     return {
         "train_path": train_path,
