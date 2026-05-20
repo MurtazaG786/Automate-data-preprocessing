@@ -42,13 +42,16 @@ if uploaded_file is not None:
         f.write(uploaded_file.getbuffer())
 
     if "result" not in st.session_state:
-        result = graph.invoke(
-            {
-                "input_file_path": input_path,
-                "output_file_path": output_path,
-                "report_path": report_path,
-                "steps": []
+        result = graph.invoke({
+                "input_file_path":input_path,
+                "output_file_path":output_path,
+                "report_path":report_path,
+                "steps":[],
+                "numerical_pipeline":None,
+                "categorical_pipeline":None,
+                "final_preprocessor":None
             },
+
             config=config
         )
 
@@ -110,6 +113,11 @@ if "result" in st.session_state:
                     config=config
                 )
 
+
+            
+
+                st.write("STATE AFTER RESUME")
+                st.write(result)
                 st.session_state["result"] = result
                 st.rerun()
 
@@ -179,38 +187,168 @@ if "result" in st.session_state:
                     for c in cat_cols:
                         st.write(f"- {c}")
 
-            # ── Downloads ───────────────────────────────────────────
-            st.subheader("Download Datasets")
+            # -----------------------------
+            # Downloads
+            # -----------------------------
 
-            train_path = result.get("train_path")
-            test_path = result.get("test_path")
+            st.subheader("Downloads")
 
-            dl_col1, dl_col2, dl_col3 = st.columns(3)
+            train_path = result.get(
+                "train_path"
+            )
 
-            output_path = st.session_state["output_path"]
-            if os.path.exists(output_path):
-                with open(output_path, "rb") as f:
-                    dl_col1.download_button(
-                        label="Download Processed CSV",
+            test_path = result.get(
+                "test_path"
+            )
+
+            preprocessor_path = result.get(
+                "final_preprocessor_path"
+            )
+
+            processed_train = result.get(
+                "processed_train_path"
+            )
+
+            processed_test = result.get(
+                "processed_test_path"
+            )
+
+
+            col1, col2, col3, col4, col5 = (
+                st.columns(5)
+            )
+
+
+            # -----------------------
+            # Train CSV
+            # -----------------------
+
+            if train_path and os.path.exists(
+                    train_path
+            ):
+
+                with open(
+                    train_path,
+                    "rb"
+                ) as f:
+
+                    col1.download_button(
+
+                        "Train CSV",
+
                         data=f.read(),
-                        file_name="processed.csv",
-                        mime="text/csv",
+
+                        file_name=
+                        "train.csv",
+
+                        mime=
+                        "text/csv"
                     )
 
-            if train_path and os.path.exists(train_path):
-                with open(train_path, "rb") as f:
-                    dl_col2.download_button(
-                        label="Download Train CSV",
+
+            # -----------------------
+            # Test CSV
+            # -----------------------
+
+            if test_path and os.path.exists(
+                    test_path
+            ):
+
+                with open(
+                    test_path,
+                    "rb"
+                ) as f:
+
+                    col2.download_button(
+
+                        "Test CSV",
+
                         data=f.read(),
-                        file_name="train.csv",
-                        mime="text/csv",
+
+                        file_name=
+                        "test.csv",
+
+                        mime=
+                        "text/csv"
                     )
 
-            if test_path and os.path.exists(test_path):
-                with open(test_path, "rb") as f:
-                    dl_col3.download_button(
-                        label="Download Test CSV",
+
+            # -----------------------
+            # Preprocessor.pkl
+            # -----------------------
+
+            if preprocessor_path and os.path.exists(
+                    preprocessor_path
+            ):
+
+                with open(
+                    preprocessor_path,
+                    "rb"
+                ) as f:
+
+                    col3.download_button(
+
+                        "Preprocessor",
+
                         data=f.read(),
-                        file_name="test.csv",
-                        mime="text/csv",
+
+                        file_name=
+                        "preprocessor.pkl",
+
+                        mime=
+                        "application/octet-stream"
+                    )
+
+
+            # -----------------------
+            # Processed Train
+            # -----------------------
+
+            if processed_train and os.path.exists(
+                    processed_train
+            ):
+
+                with open(
+                    processed_train,
+                    "rb"
+                ) as f:
+
+                    col4.download_button(
+
+                        "Processed Train",
+
+                        data=f.read(),
+
+                        file_name=
+                        "processed_train.csv",
+
+                        mime=
+                        "text/csv"
+                    )
+
+
+            # -----------------------
+            # Processed Test
+            # -----------------------
+
+            if processed_test and os.path.exists(
+                    processed_test
+            ):
+
+                with open(
+                    processed_test,
+                    "rb"
+                ) as f:
+
+                    col5.download_button(
+
+                        "Processed Test",
+
+                        data=f.read(),
+
+                        file_name=
+                        "processed_test.csv",
+
+                        mime=
+                        "text/csv"
                     )
