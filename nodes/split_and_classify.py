@@ -5,17 +5,37 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
+from llm_config import build_fallback_llm
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 load_dotenv()
 
-
 class ColumnClassification(BaseModel):
+    model_config = ConfigDict(strict=True)
+
     numerical_columns: list[str] = Field(
-        description="List of numerical column names (int, float, continuous, discrete counts)"
+        default_factory=list,
+        description=(
+            "Column names where values represent measurable quantities suitable for arithmetic "
+            "(e.g., age, salary, distance, score). Includes continuous and discrete counts "
+            "with high cardinality (typically >10 unique values)."
+        )
     )
     categorical_columns: list[str] = Field(
-        description="List of categorical column names (labels, classes, binary flags, ordinal text)"
+        default_factory=list,
+        description=(
+            "Column names representing labels, classes, groups, binary flags, or ordinal categories — "
+            "even if stored as integers. Typically <=10 unique values, but semantic meaning "
+            "takes priority over cardinality (e.g., zip codes, IDs, yes/no flags)."
+        )
     )
+
+    @model_validator(mode="after")
+    def no_overlap_and_no_missing(self) -> "ColumnClassification":
+        overlap = set(self.numerical_columns) & set(self.categorical_columns)
+        if overlap:
+            raise ValueError(f"Columns appear in both lists: {overlap}")
+        return self
 
 
 def split_and_classify_node(state):
@@ -94,16 +114,16 @@ def split_and_classify_node(state):
     nunique_info = sample_df.nunique().to_string()
 
     prompt = f"""
-You are a senior machine learning engineer.
+You are a data scientist. Classify each feature column as "numerical" or "categorical".
 
-Classify each feature column as either **numerical** or **categorical**.
+Numerical: measurable quantities used for arithmetic (age, salary, score) — usually high cardinality (>10 unique values).
+Categorical: labels, groups, flags, or IDs — even if stored as integers. Semantic meaning overrides cardinality (e.g., zip codes, binary flags).
 
-Rules:
-- Numerical columns contain continuous or discrete numbers used for computation (e.g., age, salary, price, quantity, score).
-- Categorical columns contain labels, classes, or binary flags, EVEN if they are stored as integers (e.g., gender encoded as 0/1, department IDs with few unique values).
-- A column stored as int/float but having very few unique values (e.g., <= 10) is likely categorical.
-- Only classify the feature columns listed below. Do NOT include the target column.
-- Return ONLY valid column names from the given list.
+Rules (apply in order):
+1. Name/values suggest a label, group, or flag → categorical
+2. Unique values <= 10 AND not a measurement → categorical
+3. Arithmetic makes sense (averages, sums) → numerical
+4. Uncertain → categorical
 
 Feature columns:
 {feature_columns}
@@ -129,6 +149,8 @@ Sample data (from training set only):
                 response_schema=ColumnClassification,
             ),
         )
+        # llm=build_fallback_llm()
+        # classification=llm.with_structured_output(ColumnClassification).invoke(prompt)
 
         classification = ColumnClassification.model_validate_json(response.text)
 
