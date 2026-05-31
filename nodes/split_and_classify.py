@@ -1,9 +1,10 @@
 import os
 import pandas as pd
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 from google import genai
 from google.genai import types
+from nodes.llm_env import get_primary_api_key_model
 
 load_dotenv()
 
@@ -117,7 +118,7 @@ def split_and_classify_node(state):
     api_key, model_name = get_primary_api_key_model()
 
     if not api_key or not model_name:
-        return {"error": "Missing GOOGLE_API_KEYS or MODEL_NAMES in environment."}
+        return {"error": "Missing GOOGLE_API_KEY or MODEL_NAME in environment."}
 
     dtypes_info = sample_df.dtypes.to_string()
     nunique_info = sample_df.nunique().to_string()
