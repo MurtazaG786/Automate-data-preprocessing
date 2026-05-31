@@ -1,27 +1,19 @@
-from typing import Literal
-from pydantic import BaseModel
-from sklearn.impute import SimpleImputer
-
-from typing import Literal
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
-import pandas as pd
-import joblib
-
 import os
-import pandas as pd
-import joblib
+from typing import Literal
 
-from sklearn.pipeline import Pipeline
+import joblib
+import pandas as pd
+from pydantic import BaseModel
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import (
     OneHotEncoder,
     OrdinalEncoder
 )
-from llm_config import build_fallback_llm
 from google import genai
 from google.genai import types
+from nodes.llm_env import get_primary_api_key_model
 
 class CategoricalColumnPlan(BaseModel):
 
@@ -48,10 +40,19 @@ class CategoricalPreprocessingPlan(BaseModel):
 
 
 def categorical_preprocessing_node(state):
-   
+    train_path = state.get("train_path")
+    cols = state.get("categorical_columns") or []
 
-    train = pd.read_csv(state["train_path"])
-    cols = state["categorical_columns"]
+    if not train_path or not os.path.exists(train_path):
+        return {"categorical_error": "Train dataset file not found for categorical preprocessing."}
+
+    if not cols:
+        return {
+            "categorical_pipeline_path": None,
+            "categorical_plan": {"columns": []},
+        }
+
+    train = pd.read_csv(train_path)
 
     # -------------------------
     # Summary stats
@@ -67,13 +68,11 @@ def categorical_preprocessing_node(state):
     # -------------------------
     # LLM setup
     # -------------------------
-    api_key = os.getenv("GOOGLE_API_KEY")
-    model_name = os.getenv("MODEL_NAME")
+    api_key, model_name = get_primary_api_key_model()
 
     if not api_key or not model_name:
         return {
-            "error":
-            "Missing GOOGLE_API_KEY or MODEL_NAME"
+            "categorical_error": "Missing GOOGLE_API_KEY or MODEL_NAME"
         }
 
     client = genai.Client(api_key=api_key)
@@ -110,7 +109,7 @@ Columns:
 
     except Exception as exc:
         return {
-            "error": f"Categorical LLM failed: {exc}"
+            "categorical_error": f"Categorical LLM failed: {exc}"
         }
 
     # -------------------------
@@ -183,8 +182,6 @@ Columns:
     # RETURN STATE
     # -------------------------
     return {
-        
         "categorical_pipeline_path": save_path,
-        "categorical_plan": plan
-        
+        "categorical_plan": plan.model_dump(),
     }

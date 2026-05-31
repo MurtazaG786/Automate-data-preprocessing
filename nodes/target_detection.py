@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
 from langgraph.types import interrupt
+from nodes.llm_env import get_primary_api_key_model
 
 load_dotenv()
 
@@ -30,8 +31,7 @@ def target_detection_node(state):
 
     df = pd.read_csv(output_path)
 
-    api_key = os.getenv("GOOGLE_API_KEY")
-    model_name = os.getenv("MODEL_NAME")
+    api_key, model_name = get_primary_api_key_model()
 
     if not api_key or not model_name:
         return {"error": "Missing GOOGLE_API_KEY or MODEL_NAME in environment."}

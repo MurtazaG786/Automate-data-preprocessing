@@ -47,9 +47,9 @@ if uploaded_file is not None:
                 "output_file_path":output_path,
                 "report_path":report_path,
                 "steps":[],
-                "numerical_pipeline":None,
-                "categorical_pipeline":None,
-                "final_preprocessor":None
+            "numerical_pipeline_path":None,
+            "categorical_pipeline_path":None,
+            "final_preprocessor_path":None
             },
 
             config=config
@@ -85,63 +85,91 @@ if "result" in st.session_state:
     if "__interrupt__" in result:
 
         interrupt_data = result["__interrupt__"][0].value
+        interrupt_type = interrupt_data.get("type")
 
-        st.info("Target column confirmation required")
+        if interrupt_type == "target_confirmation":
 
-        detected_target = interrupt_data.get("detected_target")
-        confidence = interrupt_data.get("confidence")
-        reason = interrupt_data.get("reason")
-        columns = interrupt_data.get("columns", [])
+            st.info("Target column confirmation required")
 
-        st.write(f"Detected Target: **{detected_target}**")
-        st.write(f"Confidence: **{confidence}**")
-        st.write(f"Reason: {reason}")
+            detected_target = interrupt_data.get("detected_target")
+            confidence = interrupt_data.get("confidence")
+            reason = interrupt_data.get("reason")
+            columns = interrupt_data.get("columns", [])
 
-        selected_target = st.selectbox(
-            "Select correct target column",
-            options=["No target column"] + columns,
-            index=(columns.index(detected_target) + 1)
-            if detected_target in columns else 0
-        )
+            st.write(f"Detected Target: **{detected_target}**")
+            st.write(f"Confidence: **{confidence}**")
+            st.write(f"Reason: {reason}")
 
-        col1, col2 = st.columns(2)
+            selected_target = st.selectbox(
+                "Select correct target column",
+                options=["No target column"] + columns,
+                index=(columns.index(detected_target) + 1)
+                if detected_target in columns else 0
+            )
 
-        with col1:
-            if st.button("Confirm Detected Target"):
-                result = graph.invoke(
-                    Command(resume={"approved": True}),
-                    config=config
-                )
+            col1, col2 = st.columns(2)
 
+            with col1:
+                if st.button("Confirm Detected Target"):
+                    result = graph.invoke(
+                        Command(resume={"approved": True}),
+                        config=config
+                    )
 
-            
+                    st.write("STATE AFTER RESUME")
+                    st.write(result)
+                    st.session_state["result"] = result
+                    st.rerun()
 
-                st.write("STATE AFTER RESUME")
-                st.write(result)
-                st.session_state["result"] = result
-                st.rerun()
+            with col2:
+                if st.button("Use Selected / Unsupervised"):
 
-        with col2:
-            if st.button("Use Selected / Unsupervised"):
+                    if selected_target == "No target column":
+                        resume_data = {
+                            "approved": False,
+                            "target_column": None
+                        }
+                    else:
+                        resume_data = {
+                            "approved": False,
+                            "target_column": selected_target
+                        }
 
-                if selected_target == "No target column":
-                    resume_data = {
-                        "approved": False,
-                        "target_column": None
-                    }
-                else:
-                    resume_data = {
-                        "approved": False,
-                        "target_column": selected_target
-                    }
+                    result = graph.invoke(
+                        Command(resume=resume_data),
+                        config=config
+                    )
 
-                result = graph.invoke(
-                    Command(resume=resume_data),
-                    config=config
-                )
+                    st.session_state["result"] = result
+                    st.rerun()
 
-                st.session_state["result"] = result
-                st.rerun()
+        elif interrupt_type == "feature_engineering_plan":
+
+            st.info("Feature engineering plan requires approval")
+
+            st.write(interrupt_data.get("question", "Review the plan"))
+            plan = interrupt_data.get("plan", {})
+            st.json(plan)
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                if st.button("Approve Feature Plan"):
+                    result = graph.invoke(
+                        Command(resume={"approved": True}),
+                        config=config
+                    )
+                    st.session_state["result"] = result
+                    st.rerun()
+
+            with col2:
+                if st.button("Skip Feature Engineering"):
+                    result = graph.invoke(
+                        Command(resume={"approved": False}),
+                        config=config
+                    )
+                    st.session_state["result"] = result
+                    st.rerun()
 
     else:
 
@@ -153,6 +181,12 @@ if "result" in st.session_state:
 
         if result.get("target_column"):
             st.write(f"Target Column: **{result['target_column']}**")
+
+        if result.get("numerical_error"):
+            st.error(result["numerical_error"])
+
+        if result.get("categorical_error"):
+            st.error(result["categorical_error"])
 
         if result.get("error"):
             st.error(result["error"])

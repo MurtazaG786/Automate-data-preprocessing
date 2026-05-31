@@ -1,12 +1,9 @@
 import os
-import json
 import pandas as pd
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
-from llm_config import build_fallback_llm
-from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 load_dotenv()
 
@@ -49,14 +46,11 @@ def split_and_classify_node(state):
 
     output_path = state.get("output_file_path")
     target_column = state.get("target_column")
-    problem_type = state.get("problem_type", "unsupervised")
-
-    output_path = state.get("output_file_path")
+    
 
     
     if not output_path or not os.path.exists(output_path):
-        return {"error": "Processed dataset file not found for splitting."}  # ← silent fail here!
-    ...
+        return {"error": "Processed dataset file not found for splitting."}
 
     df = pd.read_csv(output_path)
 
@@ -104,11 +98,26 @@ def split_and_classify_node(state):
 
     # ── LLM Column Classification ──────────────────────────────────────
 
-    api_key = os.getenv("GOOGLE_API_KEY")
-    model_name = os.getenv("MODEL_NAME")
+    if not feature_columns:
+        return {
+            "train_path": train_path,
+            "test_path": test_path,
+            "train_rows": len(train_df),
+            "test_rows": len(test_df),
+            "numerical_columns": [],
+            "categorical_columns": [],
+            "steps": state.get("steps", []) + [
+                f"Train/Test split done — Train: {len(train_df)} rows, Test: {len(test_df)} rows",
+                "No feature columns available for classification."
+            ],
+            "message": "Split complete. No feature columns to classify.",
+            "error": None,
+        }
+
+    api_key, model_name = get_primary_api_key_model()
 
     if not api_key or not model_name:
-        return {"error": "Missing GOOGLE_API_KEY or MODEL_NAME in environment."}
+        return {"error": "Missing GOOGLE_API_KEYS or MODEL_NAMES in environment."}
 
     dtypes_info = sample_df.dtypes.to_string()
     nunique_info = sample_df.nunique().to_string()

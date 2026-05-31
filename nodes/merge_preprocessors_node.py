@@ -8,6 +8,12 @@ import tempfile
 
 def merge_preprocessors_node(state):
 
+    if state.get("numerical_error"):
+        return {"error": state.get("numerical_error")}
+
+    if state.get("categorical_error"):
+        return {"error": state.get("categorical_error")}
+
     train = pd.read_csv(
         state["train_path"]
     )
@@ -48,45 +54,28 @@ def merge_preprocessors_node(state):
         y_test = None
 
 
-    # -------------------------
-    # Load pipelines
-    # -------------------------
+    num_cols = state.get("numerical_columns") or []
+    cat_cols = state.get("categorical_columns") or []
+    num_path = state.get("numerical_pipeline_path")
+    cat_path = state.get("categorical_pipeline_path")
 
-    numerical_pipeline = joblib.load(
-        state[
-            "numerical_pipeline_path"
-        ]
-    )
+    transformers = []
 
-    categorical_pipeline = joblib.load(
-        state[
-            "categorical_pipeline_path"
-        ]
-    )
+    if num_cols:
+        if not num_path or not os.path.exists(num_path):
+            return {"error": "Numerical preprocessing pipeline not found."}
+        numerical_pipeline = joblib.load(num_path)
+        transformers.append(("num", numerical_pipeline, num_cols))
+
+    if cat_cols:
+        if not cat_path or not os.path.exists(cat_path):
+            return {"error": "Categorical preprocessing pipeline not found."}
+        categorical_pipeline = joblib.load(cat_path)
+        transformers.append(("cat", categorical_pipeline, cat_cols))
 
 
     preprocessor = ColumnTransformer(
-
-        transformers=[
-
-            (
-                "num",
-                numerical_pipeline,
-                state[
-                    "numerical_columns"
-                ]
-            ),
-
-            (
-                "cat",
-                categorical_pipeline,
-                state[
-                    "categorical_columns"
-                ]
-            )
-
-        ],
-
+        transformers=transformers,
         remainder="passthrough"
     )
     print(preprocessor)
@@ -192,9 +181,10 @@ def merge_preprocessors_node(state):
         "final_preprocessor_path":
             preprocessor_path,
 
-        "steps":
-
-            state.get(
-                "steps",[])+["merged preprocessors","processed train/test saved"
-            ]
+        "steps": state.get("steps", []) + [
+            "Numerical preprocessing ready.",
+            "Categorical preprocessing ready.",
+            "Merged preprocessors.",
+            "Processed train/test saved.",
+        ]
     }

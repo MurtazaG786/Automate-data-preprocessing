@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
+from nodes.llm_env import get_primary_api_key_model
 
 load_dotenv()
 
@@ -33,8 +34,7 @@ def cleanup(state):
 
     valid_columns_to_drop = []
 
-    api_key = os.getenv("GOOGLE_API_KEY")
-    model_name = os.getenv("MODEL_NAME")
+    api_key, model_name = get_primary_api_key_model()
 
     if api_key and model_name:
         prompt = f"""

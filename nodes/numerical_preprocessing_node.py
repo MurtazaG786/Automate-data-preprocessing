@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from google import genai
 from google.genai import types
-from llm_config import build_fallback_llm
+from nodes.llm_env import get_primary_api_key_model
 class NumericalColumnPlan(BaseModel):
     name: str
 
@@ -50,9 +50,19 @@ class NumericalPreprocessingPlan(BaseModel):
 
 
 def numerical_preprocessing_node(state):
+    train_path = state.get("train_path")
+    cols = state.get("numerical_columns") or []
 
-    train = pd.read_csv(state["train_path"])
-    cols = state["numerical_columns"]
+    if not train_path or not os.path.exists(train_path):
+        return {"numerical_error": "Train dataset file not found for numerical preprocessing."}
+
+    if not cols:
+        return {
+            "numerical_pipeline_path": None,
+            "numerical_plan": {"columns": []},
+        }
+
+    train = pd.read_csv(train_path)
 
     # -------------------------
     # Summary stats
@@ -65,16 +75,12 @@ def numerical_preprocessing_node(state):
     # -------------------------
     # LLM setup
     # -------------------------
-    api_key = os.getenv("GOOGLE_API_KEY")
-    model_name = os.getenv("MODEL_NAME")
+    api_key, model_name = get_primary_api_key_model()
 
     if not api_key or not model_name:
         return {
-            "error":
-            "Missing GOOGLE_API_KEY or MODEL_NAME"
+            "numerical_error": "Missing GOOGLE_API_KEY or MODEL_NAME"
         }
-    llm=build_fallback_llm()
-
     client = genai.Client(api_key=api_key)
 
     prompt = f"""
@@ -115,7 +121,7 @@ Columns:
 
     except Exception as exc:
         return {
-            "error": f"Numerical LLM failed: {exc}"
+            "numerical_error": f"Numerical LLM failed: {exc}"
         }
 
     # -------------------------
@@ -183,8 +189,6 @@ Columns:
     # RETURN STATE
     # -------------------------
     return {
-        
         "numerical_pipeline_path": save_path,
-        "numerical_plan": plan,
-        
+        "numerical_plan": plan.model_dump(),
     }
