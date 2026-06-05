@@ -1,4 +1,5 @@
 import os
+import tempfile
 import pandas as pd
 import joblib
 
@@ -52,6 +53,7 @@ class NumericalPreprocessingPlan(BaseModel):
 def numerical_preprocessing_node(state):
     train_path = state.get("train_path")
     cols = state.get("numerical_columns") or []
+    temp_dir = state.get("temp_dir") or tempfile.gettempdir()
 
     if not train_path or not os.path.exists(train_path):
         return {"numerical_error": "Train dataset file not found for numerical preprocessing."}
@@ -179,9 +181,7 @@ Columns:
     # -------------------------
     # SAVE PIPELINE
     # -------------------------
-    os.makedirs("artifacts", exist_ok=True)
-
-    save_path = "artifacts/numerical_pipeline.pkl"
+    save_path = os.path.join(temp_dir, "numerical_pipeline.pkl")
 
     joblib.dump(pipeline, save_path)
 

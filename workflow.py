@@ -1,5 +1,3 @@
-import importlib
-import os
 from typing import TypedDict, Optional
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
@@ -20,6 +18,7 @@ class MLState(TypedDict):
     input_file_path: str
     output_file_path: str
     report_path: str
+    temp_dir: Optional[str]
 
     rows: Optional[int]
     cols: Optional[int]
@@ -30,6 +29,8 @@ class MLState(TypedDict):
     # Split paths
     train_path: Optional[str]
     test_path: Optional[str]
+    train_raw_path: Optional[str]
+    test_raw_path: Optional[str]
     train_rows: Optional[int]
     test_rows: Optional[int]
 
@@ -93,16 +94,5 @@ builder.add_edge("merge_preprocessors", END)
 
 
 checkpointer = MemorySaver()
-sqlite_saver = None
-
-try:
-    sqlite_module = importlib.import_module("langgraph.checkpoint.sqlite")
-    sqlite_saver = getattr(sqlite_module, "SqliteSaver", None)
-except Exception:
-    sqlite_saver = None
-
-if sqlite_saver is not None:
-    os.makedirs("artifacts", exist_ok=True)
-    checkpointer = sqlite_saver.from_conn_string("artifacts/graph_checkpoints.sqlite")
 
 graph = builder.compile(checkpointer=checkpointer)

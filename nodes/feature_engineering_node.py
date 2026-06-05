@@ -107,6 +107,7 @@ def feature_engineering_node(state: dict[str, Any]) -> dict[str, Any]:
     train_path = state.get("train_path")
     test_path = state.get("test_path")
     target = state.get("target_column")
+    temp_dir = state.get("temp_dir")
 
     if not train_path or not os.path.exists(train_path):
         return {"error": "Train dataset file not found for feature engineering."}
@@ -178,6 +179,7 @@ def feature_engineering_node(state: dict[str, Any]) -> dict[str, Any]:
 You are a senior ML feature engineering expert.
 
 Propose a safe, minimal set of feature engineering operations.
+Write explanations for a non-technical audience.
 
 Rules:
 - Only use these ops: extract_numeric, concat_text, date_parts, ratio, bin_numeric, rare_to_other, drop_low_variance, drop_low_correlation.
@@ -186,6 +188,7 @@ Rules:
 - Keep ops minimal and high-impact; return at most 4 ops.
 - Only include fields relevant to the chosen op. Do not include nulls or unused fields.
 - Always include: op, inputs, reason, confidence.
+- The reason must be plain-English, non-technical, and short (one sentence). Avoid ML jargon.
 - For ops that create a new feature, include output_column.
 - For concat_text include sep.
 - For date_parts include parts.
@@ -326,19 +329,20 @@ target_info:
                         test.drop(columns=[c for c in drop_cols if c in test.columns], inplace=True)
                         applied_ops.extend(drop_cols)
 
-    base_dir = os.path.dirname(train_path)
+    base_dir = temp_dir or os.path.dirname(train_path)
     train_out = os.path.join(base_dir, "train_fe.csv")
     test_out = os.path.join(base_dir, "test_fe.csv")
 
     train.to_csv(train_out, index=False)
     test.to_csv(test_out, index=False)
 
-    os.makedirs("artifacts", exist_ok=True)
-    plan_path = os.path.join("artifacts", "feature_plan.json")
+    plan_path = os.path.join(base_dir, "feature_plan.json")
     with open(plan_path, "w", encoding="utf-8") as f:
         json.dump(plan_dict, f, indent=2)
 
     return {
+        "train_raw_path": state.get("train_raw_path") or train_path,
+        "test_raw_path": state.get("test_raw_path") or test_path,
         "train_path": train_out,
         "test_path": test_out,
         "feature_engineering_plan": plan_dict,

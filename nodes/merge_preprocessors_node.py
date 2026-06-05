@@ -1,10 +1,14 @@
 import os
 import joblib
 import pandas as pd
+import numpy as np
 
 from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder
 import tempfile
+
+from nodes.feature_engineering_transformer import FeatureEngineeringTransformer
 
 def merge_preprocessors_node(state):
 
@@ -14,13 +18,11 @@ def merge_preprocessors_node(state):
     if state.get("categorical_error"):
         return {"error": state.get("categorical_error")}
 
-    train = pd.read_csv(
-        state["train_path"]
-    )
+    train_path = state.get("train_raw_path") or state["train_path"]
+    test_path = state.get("test_raw_path") or state["test_path"]
 
-    test = pd.read_csv(
-        state["test_path"]
-    )
+    train = pd.read_csv(train_path)
+    test = pd.read_csv(test_path)
 
     target = state.get(
         "target_column"
@@ -78,7 +80,21 @@ def merge_preprocessors_node(state):
         transformers=transformers,
         remainder="passthrough"
     )
-    print(preprocessor)
+
+    steps = []
+    feature_plan = state.get("feature_engineering_plan")
+    if feature_plan and state.get("feature_engineering_approved") is True:
+        steps.append(
+            (
+                "feature_engineering",
+                FeatureEngineeringTransformer(
+                    plan=feature_plan,
+                    target_column=target
+                )
+            )
+        )
+    steps.append(("preprocessor", preprocessor))
+    pipeline = Pipeline(steps)
 
    
 
@@ -87,13 +103,13 @@ def merge_preprocessors_node(state):
     # -------------------------
 
     train_processed = pd.DataFrame(
-        preprocessor.fit_transform(X_train),
-        columns=preprocessor.get_feature_names_out()
+        pipeline.fit_transform(X_train.replace({pd.NA: np.nan}), y_train),
+        columns=pipeline.named_steps["preprocessor"].get_feature_names_out()
     )
 
     test_processed = pd.DataFrame(
-        preprocessor.transform(X_test),
-        columns=preprocessor.get_feature_names_out()
+        pipeline.transform(X_test.replace({pd.NA: np.nan})),
+        columns=pipeline.named_steps["preprocessor"].get_feature_names_out()
     )
 
 
@@ -132,14 +148,18 @@ def merge_preprocessors_node(state):
   
 
     # temporary csv files
+    temp_dir = state.get("temp_dir")
+
     train_temp = tempfile.NamedTemporaryFile(
         suffix=".csv",
-        delete=False
+        delete=False,
+        dir=temp_dir
     )
 
     test_temp = tempfile.NamedTemporaryFile(
         suffix=".csv",
-        delete=False
+        delete=False,
+        dir=temp_dir
     )
 
     train_processed.to_csv(
@@ -156,13 +176,11 @@ def merge_preprocessors_node(state):
     # temporary preprocessor file
     preprocessor_temp = tempfile.NamedTemporaryFile(
         suffix=".pkl",
-        delete=False
+        delete=False,
+        dir=temp_dir
     )
 
-    joblib.dump(
-        preprocessor,
-        preprocessor_temp.name
-    )
+    joblib.dump(pipeline, preprocessor_temp.name)
 
 
     train_out = train_temp.name
@@ -184,7 +202,7 @@ def merge_preprocessors_node(state):
         "steps": state.get("steps", []) + [
             "Numerical preprocessing ready.",
             "Categorical preprocessing ready.",
-            "Merged preprocessors.",
+            "Merged preprocessors with feature engineering.",
             "Processed train/test saved.",
         ]
     }

@@ -42,18 +42,32 @@ if uploaded_file is not None:
         f.write(uploaded_file.getbuffer())
 
     if "result" not in st.session_state:
-        result = graph.invoke({
-                "input_file_path":input_path,
-                "output_file_path":output_path,
-                "report_path":report_path,
-                "steps":[],
-            "numerical_pipeline_path":None,
-            "categorical_pipeline_path":None,
-            "final_preprocessor_path":None
+        status = st.status("Starting pipeline...", expanded=False)
+        latest = None
+        for chunk in graph.stream(
+            {
+                "input_file_path": input_path,
+                "output_file_path": output_path,
+                "report_path": report_path,
+                "temp_dir": temp_dir,
+                "steps": [],
+                "numerical_pipeline_path": None,
+                "categorical_pipeline_path": None,
+                "final_preprocessor_path": None,
             },
+            config=config,
+            stream_mode="values",
+        ):
+            latest = chunk
+            steps = chunk.get("steps") or []
+            if steps:
+                status.update(label=f"Working: {steps[-1]}", state="running")
+            elif "__interrupt__" in chunk:
+                status.update(label="Waiting for approval...", state="running")
 
-            config=config
-        )
+        result = latest
+        if result and "__interrupt__" not in result:
+            status.update(label="Pipeline complete", state="complete")
 
         st.session_state["result"] = result
         st.session_state["output_path"] = output_path
@@ -75,12 +89,13 @@ if "result" in st.session_state:
 
     if report_path and os.path.exists(report_path):
         st.subheader("Dataset Report")
-        with open(report_path, "r", encoding="utf-8") as html_file:
-            components.html(
-                html_file.read(),
-                height=800,
-                scrolling=True
-            )
+        with st.spinner("Loading report..."):
+            with open(report_path, "r", encoding="utf-8") as html_file:
+                components.html(
+                    html_file.read(),
+                    height=800,
+                    scrolling=True
+                )
 
     if "__interrupt__" in result:
 
