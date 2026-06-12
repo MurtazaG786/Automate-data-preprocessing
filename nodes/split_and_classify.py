@@ -63,11 +63,29 @@ def split_and_classify_node(state):
         X = df.drop(columns=[target_column])
         y = df[target_column]
 
+        unique_count = y.nunique(dropna=True)
+
+        if y.dtype == "object" or y.dtype == "bool":
+            problem_type = "classification"
+        elif unique_count <= 20:
+            problem_type = "classification"
+        else:
+            problem_type = "regression"
+
+        stratify_y = None
+
+        if problem_type == "classification":
+            class_counts = y.value_counts(dropna=False)
+
+            if class_counts.min() >= 2:
+                stratify_y = y
 
         X_train, X_test, y_train, y_test = train_test_split(
-            X, y,
+            X,
+            y,
             test_size=0.2,
-            random_state=42
+            random_state=42,
+            stratify=stratify_y
         )
 
         train_df = X_train.copy()

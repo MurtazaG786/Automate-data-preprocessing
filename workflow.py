@@ -1,6 +1,10 @@
+
+import os
 from typing import TypedDict, Optional
+from dotenv import load_dotenv
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.postgres import PostgresSaver
+from psycopg_pool import ConnectionPool
 
 from nodes.load_dataset_node import load_dataset_node
 from nodes.cleanup import cleanup
@@ -12,6 +16,18 @@ from nodes.categorical_preprocessing_node import categorical_preprocessing_node
 from nodes.numerical_preprocessing_node import numerical_preprocessing_node
 from nodes.merge_preprocessors_node import merge_preprocessors_node
 
+DB_URI = os.environ["SUPABASE_DB_URL"]
+
+pool = ConnectionPool(
+    conninfo=DB_URI,
+    min_size=1,
+    max_size=5,
+    kwargs={"autocommit": True, "prepare_threshold": 0},
+    # prepare_threshold=0 required for Supabase transaction pooler (PgBouncer)
+)
+
+checkpointer = PostgresSaver(pool)
+checkpointer.setup()
 
 
 class MLState(TypedDict):
@@ -49,6 +65,7 @@ class MLState(TypedDict):
     feature_engineering_plan_path: Optional[str]
     feature_engineering_approved: Optional[bool]
     feature_engineering_applied: Optional[bool]
+    feature_engineering_transformer_path:Optional[str]
 
     numerical_error: Optional[str]
     categorical_error: Optional[str]
@@ -91,8 +108,5 @@ builder.add_edge("categorical_processing", "merge_preprocessors")
 builder.add_edge("merge_preprocessors", END)
 
 
-
-
-checkpointer = MemorySaver()
 
 graph = builder.compile(checkpointer=checkpointer)

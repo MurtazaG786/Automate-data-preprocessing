@@ -36,3 +36,6 @@ pydantic
 
 setuptools<81
 sweetviz
+langgraph-checkpoint-postgres 
+psycopg[binary] 
+psycopg-pool
