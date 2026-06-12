@@ -9,6 +9,9 @@ from google.genai import types
 from pydantic import BaseModel, Field
 from langgraph.types import interrupt
 from nodes.llm_env import get_primary_api_key_model
+import shutil
+from pathlib import Path
+import os, zipfile
 
 load_dotenv()
 
@@ -102,6 +105,30 @@ def _drop_low_variance(df: pd.DataFrame, cols: list[str], threshold: float | Non
                 drop_cols.append(col)
     return drop_cols
 
+def copy_feature_engineering_transformer_to_temp(temp_dir: str) -> str:
+    """
+    Copies the reusable sklearn transformer file into temp_dir/nodes/
+    so it can be bundled with preprocessor.pkl.
+    """
+
+    source_path = Path(__file__).resolve().parent / "feature_engineering_transformer.py"
+
+    if not source_path.exists():
+        raise FileNotFoundError(
+            f"Feature engineering transformer file not found: {source_path}"
+        )
+
+    temp_nodes_dir = Path(temp_dir) / "nodes"
+    temp_nodes_dir.mkdir(parents=True, exist_ok=True)
+
+    init_path = temp_nodes_dir / "__init__.py"
+    transformer_path = temp_nodes_dir / "feature_engineering_transformer.py"
+
+    init_path.write_text("", encoding="utf-8")
+
+    shutil.copyfile(source_path, transformer_path)
+
+    return str(transformer_path)
 
 def feature_engineering_node(state: dict[str, Any]) -> dict[str, Any]:
     train_path = state.get("train_path")
@@ -340,18 +367,22 @@ target_info:
     with open(plan_path, "w", encoding="utf-8") as f:
         json.dump(plan_dict, f, indent=2)
 
+    feature_engineering_transformer_path = copy_feature_engineering_transformer_to_temp(base_dir)
+
     return {
-        "train_raw_path": state.get("train_raw_path") or train_path,
-        "test_raw_path": state.get("test_raw_path") or test_path,
-        "train_path": train_out,
-        "test_path": test_out,
-        "feature_engineering_plan": plan_dict,
-        "feature_engineering_plan_path": plan_path,
-        "feature_engineering_approved": True,
-        "feature_engineering_applied": True,
-        "steps": state.get("steps", []) + [
-            f"Feature engineering applied. Ops affected: {len(applied_ops)}",
-        ],
-        "message": "Feature engineering applied.",
-        "error": None,
-    }
+    "train_raw_path": state.get("train_raw_path") or train_path,
+    "test_raw_path": state.get("test_raw_path") or test_path,
+    "train_path": train_out,
+    "test_path": test_out,
+    "feature_engineering_plan": plan_dict,
+    "feature_engineering_plan_path": plan_path,
+    "feature_engineering_transformer_path": feature_engineering_transformer_path,
+    "feature_engineering_approved": True,
+    "feature_engineering_applied": True,
+    "steps": state.get("steps", []) + [
+        f"Feature engineering applied. Ops affected: {len(applied_ops)}",
+        "Feature engineering transformer file created.",
+    ],
+    "message": "Feature engineering applied.",
+    "error": None,
+}

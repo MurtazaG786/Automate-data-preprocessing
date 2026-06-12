@@ -2,7 +2,7 @@ import os
 import tempfile
 import pandas as pd
 import joblib
-
+from utils.llm_config import build_fallback_llm
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
@@ -117,6 +117,7 @@ Columns:
                 response_schema=NumericalPreprocessingPlan,
             ),
         )
+        # llm = build_fallback_llm()
         # plan=llm.with_structured_output(NumericalPreprocessingPlan).invoke(prompt)
 
         plan = response.parsed

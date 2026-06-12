@@ -7,6 +7,7 @@ from google import genai
 from google.genai import types
 from langgraph.types import interrupt
 from nodes.llm_env import get_primary_api_key_model
+from utils.llm_config import build_fallback_llm
 
 load_dotenv()
 
@@ -65,8 +66,9 @@ Dataset sample:
                 response_schema=TargetDetectionResult,
             ),
         )
-
-        result = TargetDetectionResult.model_validate_json(response.text)
+        # llm=build_fallback_llm()
+        # result=llm.with_structured_output(TargetDetectionResult).invoke(prompt)
+        result = response.parsed
 
     except Exception as exc:
         return {"error": f"Target detection failed: {exc}"}
