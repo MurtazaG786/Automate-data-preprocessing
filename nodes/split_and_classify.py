@@ -36,6 +36,17 @@ class ColumnClassification(BaseModel):
         return self
 
 
+class SplitPreprocessingPlan(ColumnClassification):
+    apply_smote: bool = Field(
+        default=False,
+        description="Whether the training set should be oversampled with SMOTE because the target classes are imbalanced."
+    )
+    smote_reason: str = Field(
+        default="",
+        description="Short explanation for the SMOTE decision."
+    )
+
+
 def split_and_classify_node(state):
     """
     1. Reads the cleaned dataset
@@ -72,13 +83,28 @@ def split_and_classify_node(state):
         else:
             problem_type = "regression"
 
+        class_counts = None
         stratify_y = None
 
         if problem_type == "classification":
             class_counts = y.value_counts(dropna=False)
+            minority_count = int(class_counts.min()) if not class_counts.empty else 0
+            majority_count = int(class_counts.max()) if not class_counts.empty else 0
+            imbalance_ratio = (minority_count / majority_count) if majority_count else 0.0
+            target_balance_info = (
+                f"Target class counts: {class_counts.to_dict()}\n"
+                f"Minority/majority ratio: {imbalance_ratio:.3f}\n"
+                "Apply SMOTE only if the minority class is noticeably smaller and there are enough samples to oversample safely."
+            )
 
             if class_counts.min() >= 2:
                 stratify_y = y
+        else:
+            target_balance_info = (
+                f"Target column: {target_column}\n"
+                f"Problem type: {problem_type}\n"
+                "SMOTE should not be used for regression or unsupervised problems."
+            )
 
         X_train, X_test, y_train, y_test = train_test_split(
             X,
@@ -140,6 +166,7 @@ def split_and_classify_node(state):
 
     dtypes_info = sample_df.dtypes.to_string()
     nunique_info = sample_df.nunique().to_string()
+    target_balance_info = target_balance_info if target_column and target_column in df.columns else "No target column detected."
 
     prompt = f"""
 You are a data scientist. Classify each feature column as "numerical" or "categorical".
@@ -162,8 +189,17 @@ Column dtypes:
 Unique value counts:
 {nunique_info}
 
+Target balance check:
+{target_balance_info}
+
 Sample data (from training set only):
 {sample_df.to_string()}
+
+Return JSON with:
+- numerical_columns
+- categorical_columns
+- apply_smote: true only when this is a supervised classification problem and the target classes are clearly imbalanced
+- smote_reason: short explanation for the SMOTE decision
 """
 
     client = genai.Client(api_key=api_key)
@@ -174,13 +210,13 @@ Sample data (from training set only):
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
-                response_schema=ColumnClassification,
+                response_schema=SplitPreprocessingPlan,
             ),
         )
         # llm=build_fallback_llm()
         # classification=llm.with_structured_output(ColumnClassification).invoke(prompt)
 
-        classification = ColumnClassification.model_validate_json(response.text)
+        classification = response.parsed
 
         target = state.get(
             "target_column"
@@ -213,10 +249,17 @@ Sample data (from training set only):
         "test_rows": len(test_df),
         "numerical_columns": num_cols,
         "categorical_columns": cat_cols,
+        "apply_smote": bool(getattr(classification, "apply_smote", False)) if target_column and target_column in df.columns else False,
+        "smote_reason": getattr(classification, "smote_reason", "") if target_column and target_column in df.columns else "",
         "steps": state.get("steps", []) + [
             f"Train/Test split done — Train: {len(train_df)} rows, Test: {len(test_df)} rows",
             f"Numerical columns ({len(num_cols)}): {num_cols}",
             f"Categorical columns ({len(cat_cols)}): {cat_cols}",
+            (
+                f"SMOTE requested: {bool(getattr(classification, 'apply_smote', False))}"
+                if target_column and target_column in df.columns
+                else "SMOTE skipped: no supervised target detected."
+            ),
         ],
         "message": f"Split & classify complete. Num cols: {len(num_cols)}, Cat cols: {len(cat_cols)}",
         "error": None,

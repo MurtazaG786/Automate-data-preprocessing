@@ -6,11 +6,27 @@ import joblib
 import pandas as pd
 import numpy as np
 
+from pydantic import BaseModel, Field
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder
+from imblearn.over_sampling import SMOTE
+from google import genai
+from google.genai import types
 
 from nodes.feature_engineering_transformer import FeatureEngineeringTransformer
+from nodes.llm_env import get_primary_api_key_model
+
+
+class SMOTEPlan(BaseModel):
+    apply_smote: bool = Field(
+        default=False,
+        description="Whether SMOTE should be applied to the training set."
+    )
+    reason: str = Field(
+        default="",
+        description="Short explanation for the SMOTE decision."
+    )
 
 
 def copy_feature_engineering_transformer_to_temp(temp_dir: str) -> str:
@@ -61,6 +77,7 @@ def merge_preprocessors_node(state):
     test = pd.read_csv(test_path)
 
     target = state.get("target_column")
+    problem_type = state.get("problem_type")
 
     # -------------------------
     # Separate X and y
@@ -156,6 +173,86 @@ def merge_preprocessors_node(state):
         columns=feature_names
     )
 
+    smote_applied = False
+    smote_reason = state.get("smote_reason") or ""
+
+    # -------------------------
+    # Decide whether to apply SMOTE
+    # -------------------------
+
+    if target and state.get("problem_type") == "classification":
+        class_counts = y_train.value_counts(dropna=False)
+        minority_count = int(class_counts.min()) if not class_counts.empty else 0
+        majority_count = int(class_counts.max()) if not class_counts.empty else 0
+        imbalance_ratio = (minority_count / majority_count) if majority_count else 0.0
+
+        target_balance_info = (
+            f"Target column: {target}\n"
+            f"Class counts: {class_counts.to_dict()}\n"
+            f"Minority/majority ratio: {imbalance_ratio:.3f}\n"
+            f"Minority samples: {minority_count}\n"
+            "Use SMOTE only for clear classification imbalance and only when the minority class has enough samples."
+        )
+
+        api_key, model_name = get_primary_api_key_model()
+
+        smote_requested = False
+        if api_key and model_name:
+            client = genai.Client(api_key=api_key)
+
+            prompt = f"""
+You are a machine learning preprocessing expert.
+
+Decide whether SMOTE should be applied to the training set after feature preprocessing.
+
+Rules:
+- Apply SMOTE only for supervised classification problems.
+- Do not apply SMOTE for regression or unsupervised problems.
+- Do not apply SMOTE if the classes are already reasonably balanced.
+- Do not apply SMOTE if the minority class is too small to oversample safely.
+
+Dataset summary:
+{target_balance_info}
+
+Current feature matrix shape:
+{train_processed.shape}
+
+Return JSON with:
+- apply_smote: true/false
+- reason: short explanation for the decision
+"""
+
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema=SMOTEPlan,
+                    ),
+                )
+                smote_plan = response.parsed
+                smote_requested = bool(smote_plan.apply_smote)
+                smote_reason = smote_plan.reason or smote_reason
+            except Exception:
+                smote_requested = bool(state.get("apply_smote"))
+        else:
+            smote_requested = bool(state.get("apply_smote"))
+
+        if smote_requested and minority_count >= 2 and len(class_counts) >= 2:
+            k_neighbors = min(5, minority_count - 1)
+            sampler = SMOTE(random_state=42, k_neighbors=k_neighbors)
+            X_resampled, y_resampled = sampler.fit_resample(train_processed, y_train)
+
+            train_processed = pd.DataFrame(X_resampled, columns=feature_names)
+            y_train = pd.Series(y_resampled, name=target)
+            smote_applied = True
+            smote_reason = smote_reason or (
+                f"SMOTE applied with k_neighbors={k_neighbors} to rebalance the training target."
+            )
+        elif smote_requested:
+            smote_reason = smote_reason or "SMOTE skipped because the minority class is too small or only one class is present."
+
     # -------------------------
     # Encode target if categorical
     # -------------------------
@@ -210,11 +307,14 @@ def merge_preprocessors_node(state):
         "feature_engineering_transformer_path": feature_engineering_transformer_path,
 
         "target_encoder_path": target_encoder_path,
+        "smote_applied": smote_applied,
+        "smote_reason": smote_reason,
 
         "steps": state.get("steps", []) + [
             "Numerical preprocessing ready.",
             "Categorical preprocessing ready.",
             "Merged preprocessors with feature engineering.",
+            ("Applied SMOTE to the training set." if smote_applied else "SMOTE not applied."),
             "Processed train/test saved.",
             "Final preprocessor saved.",
             "Feature engineering transformer file copied for export.",

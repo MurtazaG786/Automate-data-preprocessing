@@ -57,6 +57,9 @@ class MLState(TypedDict):
     numerical_pipeline_path: Optional[str]
     categorical_pipeline_path: Optional[str]
     final_preprocessor_path: Optional[str]
+    apply_smote: Optional[bool]
+    smote_reason: Optional[str]
+    smote_applied: Optional[bool]
 
     processed_train_path: Optional[str]
     processed_test_path: Optional[str]
