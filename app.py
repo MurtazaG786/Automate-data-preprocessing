@@ -540,7 +540,7 @@ if uploaded_file is not None:
                     with status_placeholder.container():
                         loading_row("Waiting for your input…")
                 else:
-                    current = steps[-1] if steps else "Initialising…"
+                    current = steps[-1] if steps else "initializing"
                     with status_placeholder.container():
                         loading_row(current)
 
