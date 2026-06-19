@@ -1,41 +1,35 @@
-# Core LLM + Graph
+# Core app
+streamlit
+python-dotenv
+
+# Graph / orchestration
 langgraph
+langgraph-checkpoint-postgres
+psycopg[binary]
+psycopg-pool
+
+# LLM clients
+google-genai
+langchain-openai
 langchain
 langchain-community
 langchain-core
-
-#LLM
 langchain-google-genai
 
 # Data processing
 pandas
 numpy
-
-# ML + preprocessing
-scikit-learn
-imbalanced-learn  # for SMOTE
-
-# Feature engineering / stats
 scipy
+scikit-learn
+imbalanced-learn
+joblib
 
-
-# Visualization / EDA (optional but recommended)
+# Reporting / EDA
+ydata-profiling
+sweetviz
 matplotlib
 seaborn
 
-# Profiling (optional advanced)
-ydata-profiling
-
-# API / UI (optional depending on your setup)
-fastapi
-uvicorn
-streamlit
-
-# Utilities
+# Validation / models
 pydantic
-
 setuptools<81
-sweetviz
-langgraph-checkpoint-postgres 
-psycopg[binary] 
-psycopg-pool

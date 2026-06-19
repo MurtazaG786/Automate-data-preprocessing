@@ -1,8 +1,20 @@
-from langchain_openai import ChatOpenAI
+try:
+    from langchain_openai import ChatOpenAI
+except Exception:  # pragma: no cover - optional dependency
+    ChatOpenAI = None
 
 
 def create_llm(model: str = "gpt-5-mini", **kwargs):
+    if ChatOpenAI is None:
+        raise ImportError(
+            "langchain-openai is not installed. Install it to use the OpenAI helper."
+        )
+
     return ChatOpenAI(model=model, temperature=0, **kwargs)
+
+
+def build_fallback_llm(model: str = "gpt-5-mini", **kwargs):
+    return create_llm(model=model, **kwargs)
 
 
 # from langchain_google_genai import ChatGoogleGenerativeAI

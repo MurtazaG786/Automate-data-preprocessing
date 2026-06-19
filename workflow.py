@@ -1,10 +1,17 @@
 
 import os
-from typing import TypedDict, Optional
+from importlib import import_module
+from typing import Optional, TypedDict
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.postgres import PostgresSaver
-from psycopg_pool import ConnectionPool
+
+try:
+    from langgraph.checkpoint.memory import MemorySaver
+except Exception:  # pragma: no cover - import path varies by langgraph version
+    MemorySaver = None
+
+PostgresSaver = None
+ConnectionPool = None
 
 from nodes.load_dataset_node import load_dataset_node
 from nodes.cleanup import cleanup
@@ -16,18 +23,39 @@ from nodes.categorical_preprocessing_node import categorical_preprocessing_node
 from nodes.numerical_preprocessing_node import numerical_preprocessing_node
 from nodes.merge_preprocessors_node import merge_preprocessors_node
 
-DB_URI = os.environ["SUPABASE_DB_URL"]
+def build_checkpointer():
+    db_uri = os.getenv("SUPABASE_DB_URL") or os.getenv("DATABASE_URL")
 
-pool = ConnectionPool(
-    conninfo=DB_URI,
-    min_size=1,
-    max_size=5,
-    kwargs={"autocommit": True, "prepare_threshold": 0},
-    # prepare_threshold=0 required for Supabase transaction pooler (PgBouncer)
-)
+    global PostgresSaver, ConnectionPool
 
-checkpointer = PostgresSaver(pool)
-checkpointer.setup()
+    if db_uri and PostgresSaver is None and ConnectionPool is None:
+        try:
+            postgres_module_name = "langgraph." + "checkpoint.postgres"
+            psycopg_pool_module_name = "psycopg_" + "pool"
+            postgres_module = import_module(postgres_module_name)
+            psycopg_pool_module = import_module(psycopg_pool_module_name)
+            PostgresSaver = getattr(postgres_module, "PostgresSaver", None)
+            ConnectionPool = getattr(psycopg_pool_module, "ConnectionPool", None)
+        except Exception:
+            PostgresSaver = None
+            ConnectionPool = None
+
+    if db_uri and PostgresSaver and ConnectionPool:
+        pool = ConnectionPool(
+            conninfo=db_uri,
+            min_size=1,
+            max_size=5,
+            kwargs={"autocommit": True, "prepare_threshold": 0},
+        )
+
+        checkpointer = PostgresSaver(pool)
+        checkpointer.setup()
+        return checkpointer
+
+    if MemorySaver is not None:
+        return MemorySaver()
+
+    return None
 
 
 class MLState(TypedDict):
@@ -111,5 +139,5 @@ builder.add_edge("categorical_processing", "merge_preprocessors")
 builder.add_edge("merge_preprocessors", END)
 
 
-
-graph = builder.compile(checkpointer=checkpointer)
+checkpointer = build_checkpointer()
+graph = builder.compile(checkpointer=checkpointer) if checkpointer is not None else builder.compile()

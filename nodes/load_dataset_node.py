@@ -1,5 +1,9 @@
 import pandas as pd
-from ydata_profiling import ProfileReport
+
+try:
+    from ydata_profiling import ProfileReport
+except Exception:  # pragma: no cover - optional deployment dependency
+    ProfileReport = None
 
 
 def load_dataset_node(state):
@@ -29,12 +33,16 @@ def load_dataset_node(state):
                 "error": "Uploaded CSV file is empty."
             }
 
-        # generate report
-        profile = ProfileReport(
-            df,
-            title="Dataset Report"
-        )
-        profile.to_file(report_path)
+        # generate report when the profiling dependency is available
+        if ProfileReport is not None:
+            try:
+                profile = ProfileReport(
+                    df,
+                    title="Dataset Report"
+                )
+                profile.to_file(report_path)
+            except Exception:
+                report_path = None
 
         return {
         "rows": df.shape[0],
