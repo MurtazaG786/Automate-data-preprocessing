@@ -43,6 +43,17 @@ or check-out the url :https://automate-data-preprocessing-os8of6jhfkgjjqyzt2x8nj
 4. Interact with the application when prompted (e.g., confirming the target column, approving the feature engineering plan).
 5. Once the pipeline finishes, click the **Download Pipeline Bundle (.zip)** button to get your processed data and `scikit-learn` preprocessors.
 
+## Deployment
+The repository now includes a container image and Jenkins pipeline for cloud deployment.
+
+Build and run locally with Docker:
+```bash
+docker build -t automate-data-preprocessing .
+docker run --rm -p 8501:8501 --env-file .env automate-data-preprocessing
+```
+
+The Jenkins pipeline in [Jenkinsfile](Jenkinsfile) supports optional image push and remote SSH deployment. It expects Jenkins credentials named `docker-registry-creds` for registry login and `ssh-deploy-key` for remote deployment unless you change the parameter values in the pipeline.
+
 ## Technologies Used
 * **Python**: Core programming language.
 * **Streamlit**: Web framework for the interactive user interface.
